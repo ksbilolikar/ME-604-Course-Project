@@ -21,5 +21,5 @@ esc_signal_13.write(85);    //Vary this between 40-130 to change the speed of mo
 esc_signal_8.write(85);    //Vary this between 40-130 to change the speed of motor. Higher value, higher speed.
 esc_signal_7.write(85);    //Vary this between 40-130 to change the speed of motor. Higher value, higher speed.
 
-delay(15);
+delay(16);
 }
