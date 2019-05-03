@@ -1,0 +1,186 @@
+#include <Servo.h>
+#include<Wire.h>
+#include <MPU6050.h>
+
+
+//orient
+const int MPU=0x68; 
+int16_t AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
+float ax, ay, az, wx, wy, wz;
+float roll=0, pitch=0, yaw=0;
+float t,r,p,y;
+float m1,m2,m3,m4;
+unsigned long timer = 0;
+float timestep=0.9;
+float height;
+float kp1,ky1,kr1;
+float crit_thrust=4300;
+float ref_h;
+float trust; //put some initial rpm thrust value here
+
+//motor
+Servo esc_signal_12, esc_signal_13, esc_signal_8, esc_signal_7;
+
+//ultrasound
+int trigPin = 11;    // Trigger
+int echoPin = 12;    // Echo
+long duration, cm, inches;
+
+
+
+
+void setup()
+{
+  //motor
+  esc_signal_12.attach(12);  //Specify here the pin number on which the signal pin of ESC is connected.
+  esc_signal_12.write(30);   //ESC arm command. ESCs won't start unless input speed is less during initialization.
+  esc_signal_13.attach(13);  //Specify here the pin number on which the signal pin of ESC is connected.
+  esc_signal_13.write(30);   //ESC arm command. ESCs won't start unless input speed is less during initialization.
+  esc_signal_8.attach(8);  //Specify here the pin number on which the signal pin of ESC is connected.
+  esc_signal_8.write(30);   //ESC arm command. ESCs won't start unless input speed is less during initialization.
+  esc_signal_7.attach(7);  //Specify here the pin number on which the signal pin of ESC is connected.
+  esc_signal_7.write(30);   //ESC arm command. ESCs won't start unless input speed is less during initialization.
+  delay(4000);            //ESC initialization delay.
+  
+  //orient
+  Wire.begin();
+  Wire.beginTransmission(MPU);
+  Wire.write(0x6B); 
+  Wire.write(0);    
+  Wire.endTransmission(true);
+  Serial.begin(9600);
+  
+  //ultrasound
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  
+  
+}
+
+void loop()
+{
+  
+  //ultrasound////////////////////////////////////////////////////
+  // The sensor is triggered by a HIGH pulse of 10 or more microseconds.
+  // Give a short LOW pulse beforehand to ensure a clean HIGH pulse:
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(5);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+ 
+  // Read the signal from the sensor: a HIGH pulse whose
+  // duration is the time (in microseconds) from the sending
+  // of the ping to the reception of its echo off of an object.
+  pinMode(echoPin, INPUT);
+  duration = pulseIn(echoPin, HIGH);
+ 
+  // Convert the time into a distance
+  cm = (duration/2) / 29.1;     // Divide by 29.1 or multiply by 0.0343
+  inches = (duration/2) / 74;   // Divide by 74 or multiply by 0.0135
+  
+  /*
+  Serial.print(inches);
+  Serial.print("in, ");
+  Serial.print(cm);
+  Serial.print("cm");
+  Serial.println();
+  */
+  
+  height=cm/100;
+  
+  //orient/////////////////////////////////////////////////////////
+  
+  timer = millis();
+  
+  Wire.beginTransmission(MPU);
+  Wire.write(0x3B);  
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU,14,true);  
+  AcX=Wire.read()<<8|Wire.read();    
+  AcY=Wire.read()<<8|Wire.read();  
+  AcZ=Wire.read()<<8|Wire.read(); 
+  Tmp=Wire.read()<<8|Wire.read(); 
+  GyX=Wire.read()<<8|Wire.read();  
+  GyY=Wire.read()<<8|Wire.read();  
+  GyZ=Wire.read()<<8|Wire.read();  
+
+  ax=AcX*9.81/16384;
+  ay=AcY*9.81/16384;
+  az=AcZ*9.81/16384;
+  wx=GyX/131;
+  wy=GyY/131;
+  wz=GyZ/131;
+
+  // m1:front right, m2: front left, m3: back right, m4: back left;
+
+  //t=(m1+m2+m3+m4)/4;
+  //p=(m1+m2-m3-m4)/4;
+  //y=(m1-m2-m3+m4)/4;
+  //r=(m1-m2+m3-m4)/4;
+
+  
+  
+  //following three are from sensors
+  roll = roll + timestep*wx;
+  pitch = pitch + timestep*wy;
+  yaw = yaw + timestep*wz;
+
+  
+
+
+  //here we are decreasing values
+  y=yaw-ky1*(yaw-0);
+  p=pitch-kp1*(pitch-0);
+  r=roll-kr1*(roll-0);
+
+
+
+  t=crit_thrust-kt1*(h-ref_h); 
+  
+  //these are motor values
+  m1= t+y+p+r;
+  m2= t-y+p-r;
+  m3= t-y-p+r;
+  m4= t+y-p-r;
+
+  
+  
+  Serial.print("Accelerometer: ");
+  Serial.print("X = "); Serial.print(roll);
+  Serial.print(" | Y = "); Serial.print(pitch);
+  Serial.print(" | Z = "); Serial.println(yaw); 
+
+  //Serial.print("Temp = "); Serial.print(Tmp/350+36);
+  
+  /* Serial.print("Gyroscope: ");
+  Serial.print("X = "); Serial.print(wx);
+  Serial.print(" | Y = "); Serial.print(wy);
+  Serial.print(" | Z = "); Serial.println(wz);
+  Serial.println(" ");
+  */
+  //delay(300);
+  
+  
+  
+  //motor//////////////////////////////////////////////////////
+  //12,13,7,8 //counterclockwise
+  
+  //double RPM = 4300.0;
+  double PWM_8 = (m1+3422.0)/64.5; 
+  double PWM_7 = (m2+4022.0)/74.7;
+  double PWM_13 = (m3+3374.0)/66.1;
+  double PWM_12 = (m4+3148.0)/65.8;
+
+  esc_signal_12.write(PWM_12);    //Vary this between 40-130 to change the speed of motor. Higher value, higher speed.
+  esc_signal_13.write(PWM_13);    //Vary this between 40-130 to change the speed of motor. Higher value, higher speed.
+  esc_signal_8.write(PWM_8);    //Vary this between 40-130 to change the speed of motor. Higher value, higher speed.
+  esc_signal_7.write(PWM_7);    //Vary this between 40-130 to change the speed of motor. Higher value, higher speed.
+  
+  
+  
+  
+  delay((timestep*1000) - (millis() - timer)); //i think some problem is here
+
+  
+}
