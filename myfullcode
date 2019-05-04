@@ -23,7 +23,7 @@ Servo esc_signal_12, esc_signal_13, esc_signal_8, esc_signal_7;
 
 //ultrasound
 int trigPin = 11;    // Trigger
-int echoPin = 12;    // Echo
+int echoPin = 10;    // Echo
 long duration, cm, inches;
 
 
